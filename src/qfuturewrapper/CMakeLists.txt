@@ -1,3 +1,5 @@
+include(Install)
+
 qt_add_library(
         qfuturewrapper SHARED
 
@@ -13,16 +15,4 @@ target_link_libraries(
         Qt6::Core
 )
 
-# Install the compiled library
-install(TARGETS qfuturewrapper
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-)
-
-# Install the public header
-install(FILES
-            qfuturewrapper.hpp
-            qfuturewrapper.ipp
-        DESTINATION include
-)
+InstallConfig(qfuturewrapper.hpp qfuturewrapper.ipp)

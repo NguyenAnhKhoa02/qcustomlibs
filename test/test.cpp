@@ -6,7 +6,7 @@
 
 #include <QtTest/QtTest>
 #include <QtConcurrent/QtConcurrent>
-#include "qfuturewrapper.hpp"
+#include <QFutureWrapper>
 
 namespace {
     class Test : public QObject {
@@ -25,29 +25,24 @@ void Test::init() {
 }
 
 void Test::testFunc() {
-    QFuture<int> future = QtConcurrent::run([]() {
-        return 42;
+    QPromise<void> promise;
+    promise.start();
+
+    promise.setProgressRange(0, 9);
+
+    QFuture<void> future = QtConcurrent::run([promise = std::move(promise)]() mutable {
+        for (int i = 0; i < 10; i++) {
+            promise.setProgressValue(i);
+            // Simulate work
+        }
+        // 5. Mark the promise as finished
+        promise.finish();
     });
 
-    QCustomLibs::QFutureWrapper<int>(&future)
-        .ok([](const int result) {
-            qDebug() << result;
+    QCustomLibs::QFutureWrapper<void>::create(future)
+        ->progressing([](int process) {
+
         });
-
-    // QCustomLibs::QFutureWrapper<int>(&future)
-    //     .ok([]() {
-    //
-    //     });
-
-    // QCustomLibs::QFutureWrapper<int>(&future)
-    //         .ok([]() {
-    //             qDebug() << "done";
-    //         });
-
-    // future.waitForFinished();
-    //
-    // QVERIFY(future.isFinished());
-    // QCOMPARE(future.result(), 42);
 }
 
 void Test::cleanup() {

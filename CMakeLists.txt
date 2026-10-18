@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.3)
+cmake_minimum_required(VERSION 4.1)
 project(qcustomlibs)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -16,6 +16,10 @@ if(WIN32)
             CACHE PATH "Installation directory" FORCE
     )
 endif()
+
+list(APPEND CMAKE_MODULE_PATH
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake_utils"
+)
 
 add_subdirectory(src)
 add_subdirectory(test)
