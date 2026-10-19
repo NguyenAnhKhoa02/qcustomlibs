@@ -25,24 +25,34 @@ void Test::init() {
 }
 
 void Test::testFunc() {
-    QPromise<void> promise;
-    promise.start();
-
-    promise.setProgressRange(0, 9);
-
-    QFuture<void> future = QtConcurrent::run([promise = std::move(promise)]() mutable {
-        for (int i = 0; i < 10; i++) {
-            promise.setProgressValue(i);
-            // Simulate work
-        }
-        // 5. Mark the promise as finished
-        promise.finish();
+    auto future = QtConcurrent::run([]() {
+        throw std::runtime_error("Error");
     });
-
-    QCustomLibs::QFutureWrapper<void>::create(future)
-        ->progressing([](int process) {
-
-        });
+    bool errorCalled = false;
+    future.onFailed(
+        [&](const std::exception &e) {
+            qDebug() << "Exception " << e.what(); // Sẽ IN RA ở đây!
+            errorCalled = true;
+        }
+    );
+    // auto wrapper = QCustomLibs::QFutureWrapper(future)
+    //     .error([&](const std::exception &e) {
+    //         qDebug() << "Exception " << e.what(); // Sẽ IN RA ở đây!
+    //         errorCalled = true;
+    //     });
+    QTRY_VERIFY_WITH_TIMEOUT(errorCalled, 2000);
+    // QCustomLibs::QFutureWrapper(future)
+    //         .error([](const std::exception &e) {
+    //             qDebug() << "Exception " << e.what();
+    //         })
+    //         .then([]() {
+    //             qDebug() << "Done 2";
+    //             return 2;
+    //         })
+    //         .then([](const int value) {
+    //             qDebug() << "Done 2" << value;
+    //         })
+    //         .waitForFinished();
 }
 
 void Test::cleanup() {

@@ -3,77 +3,65 @@
 #include <QFutureWatcher>
 #include <QFuture>
 
+#include "QFutureWrapper"
+#include "qfuturewrapper.hpp"
 #include "qfuturewrapper.hpp"
 
 namespace QCustomLibs {
+    template<typename T>
+    QFutureWrapper<T>::QFutureWrapper(QObject *parent, QFuture<T> *future)
+        : QObject(parent),
+          m_future(future) {
+        m_watcher = new QFutureWatcher<T>(this);
+        m_watcher->setFuture(future);
+    }
+
+    template<typename T>
+    QFutureWrapper<T>::QFutureWrapper(QFuture<T> *future)
+        : m_future(future) {
+        m_watcher = new QFutureWatcher<T>(this);
+        m_watcher->setFuture(future);
+    }
+
     template<typename T>
     QFutureWrapper<T>::QFutureWrapper(QFuture<T> future)
         : m_future(std::move(future)) {
         m_watcher = new QFutureWatcher<T>(this);
         m_watcher->setFuture(m_future);
-        connect(
-            m_watcher,
-            &QFutureWatcher<T>::finished,
-            this,
-            &QFutureWrapper<T>::handleFinished
-        );
-        connect(
-            m_watcher,
-            &QFutureWatcher<T>::progressValueChanged,
-            this,
-            [this](const int progress) {
-                m_valueChangedCallback(progress);
-            }
-        );
-    }
-
-    template<typename T>
-    void QFutureWrapper<T>::handleFinished() {
-        std::exception_ptr ep;
-        std::optional<T> value;
-
-        try {
-            value = m_future.result();
-        }catch (const QUnhandledException &e) {
-            ep = e.exception();
-            if (!ep) ep = std::current_exception();
-        }catch (...) {
-            ep = std::current_exception();
-        }
-
-        if (ep) {
-            if (m_errorCallback) m_errorCallback(ep);
-            else qWarning() << "QFutureWrapper: unhandled exception";
-        } else if (m_okCallback) {
-            m_okCallback(*value);
-        }
-
-        deleteLater();
-    }
-
-    template<typename T>
-    QFutureWrapper<T> * QFutureWrapper<T>::create(const QFuture<T> &future) {
-        return new QFutureWrapper(future);
     }
 
     template<typename T>
     template<class Function>
-    QFutureWrapper<T>* QFutureWrapper<T>::ok(Function &&callback) {
-        m_okCallback = [callback = std::forward<Function>(callback)](T result) {
-            callback(result);
-        };
+    auto QFutureWrapper<T>::then(Function &&callback) {
+        using decay_func = std::decay_t<Function>;
 
-        return this;
+        if constexpr (std::is_void_v<T>) {
+            using return_type = std::invoke_result_t<decay_func>;
+
+            auto next_future = m_future.then(
+                [cb = std::forward<Function>(callback)]() mutable {
+                    return cb();
+                }
+            );
+
+            return QFutureWrapper<return_type>(next_future);
+        } else {
+            using return_type = std::invoke_result_t<decay_func, T>;
+            auto next_future = m_future.then(
+                [cb = std::forward<Function>(callback)](T value) mutable {
+                    return cb(std::move(value));
+                }
+            );
+
+            return QFutureWrapper<return_type>(next_future);
+        }
     }
 
     template<typename T>
-    template<class Function>
-    QFutureWrapper<T> * QFutureWrapper<T>::progressing(Function &&callback) {
-        m_valueChangedCallback = [callback = std::forward<Function>(callback)](T result) {
-            callback(result);
-        };
+    QFutureWrapper<T> &QFutureWrapper<T>::waitForFinished() {
+        m_future.waitForFinished();
 
-        return this;
+        return *this;
     }
 
     // Helper to extract the argument type from a lambda/functor's operator()
@@ -95,19 +83,24 @@ namespace QCustomLibs {
 
     template<typename T>
     template<class Function, typename>
-    QFutureWrapper<T>* QFutureWrapper<T>::error(Function &&callback) {
-        using Arg = std::decay_t<extract_callback_arg_t<Function>>;
+    auto QFutureWrapper<T>::error(Function &&callback) {
+        // using Arg = std::decay_t<extract_callback_arg_t<Function> >;
 
-        m_errorCallback = [cb = std::forward<Function>(callback)](const std::exception_ptr &ep) {
-            if (!ep) return;
-            try {
-                std::rethrow_exception(ep);
-            } catch (const Arg &e) {
-                cb(e);
-            } catch (...) {
-                qWarning() << "QFutureWrapper: unhandled exception type";
+        auto next_future = m_future.onFailed(
+            [cb = std::forward<Function>(callback)](const std::exception_ptr &ep) mutable {
+                try {
+                    if (ep) {
+                        std::rethrow_exception(ep);
+                    }
+                } catch (const std::exception &e) {
+                    cb(e);
+                } catch (...) {
+                    qWarning() << "QFutureWrapper::error: unknown exception thrown";
+                    std::rethrow_exception(ep);
+                }
             }
-        };
-        return this;
+        );
+
+        return QFutureWrapper(next_future);
     }
 }

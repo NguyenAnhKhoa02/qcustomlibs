@@ -14,33 +14,22 @@ namespace QCustomLibs {
     template<typename T>
     class QFutureWrapper : public QObject {
     public:
-        // explicit QFutureWrapper(QObject *parent = nullptr, QFuture<T> *future = nullptr);
-        // explicit QFutureWrapper(QFuture<T> *future = nullptr);
-        // explicit QFutureWrapper(QFuture<T> future);
-
-        static QFutureWrapper<T> *create(const QFuture<T> &future);
+        explicit QFutureWrapper(QObject *parent = nullptr, QFuture<T> *future = nullptr);
+        explicit QFutureWrapper(QFuture<T> *future = nullptr);
+        explicit QFutureWrapper(QFuture<T> future);
 
         template<class Function>
-        QFutureWrapper<T> *ok(Function &&callback);
-
-        template<class Function>
-        QFutureWrapper<T> *progressing(Function &&callback);
+        auto then(Function &&callback);
 
         template<class Function,
             typename = std::enable_if_t<!QtPrivate::ArgResolver<Function>::HasExtraArgs> >
-        QFutureWrapper<T> *error(Function &&callback);
+        auto error(Function &&callback);
+
+        QFutureWrapper& waitForFinished();
 
     private:
-        explicit QFutureWrapper(QFuture<T> future);
-
         QFuture<T> m_future;
         QFutureWatcher<T> *m_watcher = nullptr;
-
-        void handleFinished();
-
-        std::function<void(T)> m_okCallback;
-        std::function<void(std::exception_ptr)> m_errorCallback;
-        std::function<void(int)> m_valueChangedCallback;
     };
 } // QCustomLibs
 
